@@ -83,7 +83,7 @@ def train_one_epoch(train_loader,
         images, targets = data
         images, targets = images.cuda(non_blocking=True).float(), targets.cuda(non_blocking=True).float()
 
-        gt_pre, out ,aux , edge = model(images)
+        gt_pre, out , edge = model(images)
         loss = criterion(gt_pre, out, aux , edge , targets)
 
         loss.backward()
@@ -125,7 +125,7 @@ def val_one_epoch(test_loader,
             img, msk = data
             img, msk = img.cuda(non_blocking=True).float(), msk.cuda(non_blocking=True).float()
 
-            gt_pre, out ,aux , edge = model(img)
+            gt_pre, out, edge = model(img)
 
             gts = msk.squeeze(1).cpu().detach().numpy()
             preds = out.squeeze(1).cpu().detach().numpy()
@@ -193,7 +193,7 @@ def test_one_epoch(test_loader,
             img, msk = data
             img, msk0 = img.cuda(non_blocking=True).float(), msk.cuda(non_blocking=True).float()
 
-            gt_pre,  out0 , aux , edge = model(img)
+            gt_pre,  out0 , edge = model(img)
 
             msk = msk0.squeeze(1).cpu().detach().numpy()
             out = out0.squeeze(1).cpu().detach().numpy()
@@ -212,18 +212,14 @@ def test_one_epoch(test_loader,
             total_miou += miou
             total += 1
 
-            # if i % config.save_interval == 0:
-            # kp1, kp2, kp3, kp4, kp5, kp6, kp7, kp8, kp9, kp10, kp11, kp12 = key_points
-            # gt1, gt2, gt3, gt4, gt5 = gt_pre
-            # save_imgs(img, msk, out, key_points, gt_pre, i, config.work_dir + 'outputs/' + 'ISIC2017' + '/', config.datasets, config.threshold, test_data_name=test_data_name)
-
+         
             for i in range(img.shape[0]):
-                # 获取当前样本数据
+     
                 img = img[i]  # (C, H, W)
                 msk = msk[i]  # (H, W)
                 out = out[i]  # (H, W)
 
-                # 保存可视化结果
+       
                 save_visualization(img, msk0, out0, save_dir)
         total_miou = total_miou / total
 
