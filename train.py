@@ -77,9 +77,6 @@ def main(config):
     model = model.cuda()
 
 
-
-
-
     print('#----------Prepareing loss, opt, sch and amp----------#')
     criterion = config.criterion
     optimizer = get_optimizer(config, model)
@@ -88,9 +85,6 @@ def main(config):
                                                           # mode='min',
                                                           # factor=0.9,
                                                           # patience=2, verbose=True)
-
-
-
 
 
     print('#----------Set other params----------#')
@@ -104,17 +98,6 @@ def main(config):
 
     if os.path.exists(resume_model):
         print('#----------Resume Model and Other params----------#')
-        # checkpoint = torch.load(resume_model, map_location=torch.device('cpu'))
-        # model.load_state_dict(checkpoint['model_state_dict'])
-        # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        # scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-        # saved_epoch = checkpoint['epoch']
-        # start_epoch += saved_epoch
-        # min_loss, min_epoch, loss = checkpoint['min_loss'], checkpoint['min_epoch'], checkpoint['loss']
-        #
-        # log_info = f'resuming model from {resume_model}. resume_epoch: {saved_epoch}, min_loss: {min_loss:.4f}, min_epoch: {min_epoch}, loss: {loss:.4f}'
-        # logger.info(log_info)
-
 
 
 
@@ -150,14 +133,6 @@ def main(config):
                 min_value = value
                 min_epoch = epoch
 
-        # torch.save(
-        #     {
-        #         'epoch': epoch,
-        #         'min_epoch': min_epoch,
-        #         'model_state_dict': model.state_dict(),
-        #         'optimizer_state_dict': optimizer.state_dict(),
-        #         'scheduler_state_dict': scheduler.state_dict(),
-        #     }, os.path.join(checkpoint_dir, 'latest.pth'))
 
     if os.path.exists(os.path.join(checkpoint_dir, 'best.pth')):
         print('#----------Testing----------#')
