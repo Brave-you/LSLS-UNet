@@ -93,9 +93,6 @@ def main(config):
     min_epoch = 1
 
 
-
-
-
     if os.path.exists(resume_model):
         print('#----------Resume Model and Other params----------#')
 
@@ -153,7 +150,7 @@ def main(config):
 
 if __name__ == '__main__':
     config = setting_config
-    net =  LSLSNet(num_classes =1 ).cuda()  # 定义好的网络模型
+    net =  LSLSNet(num_classes =1 ).cuda() 
     input = torch.randn(1, 3, 256, 256).cuda()
     flops, params = profile(net, (input,))
     outputs = net (input)
