@@ -27,41 +27,6 @@ class DepthWiseConv2d(nn.Module):
     def forward(self, x):
         return self.conv2(self.norm_layer(self.conv1(x)))
 
-class ConvLayer(nn.Module):
-    def __init__(self, dim,dilation=7):
-        super().__init__()
-        self.conv1 = nn.Conv2d(dim, dim, kernel_size=3, padding=(3 + (3 - 1) * (dilation - 1)) // 2,stride=1,dilation=dilation, groups=dim, padding_mode='reflect') # depthwise conv
-        self.norm1 = nn.BatchNorm2d(dim)
-        self.act1 = nn.GELU()
-
-        self.conv2 = nn.Conv2d(dim, 4 * dim, kernel_size=1, padding=0, stride=1) #DeformConv2d(dim, dim, kernel_size=3, padding=1,stride=1) #
-        self.conv3 = nn.Conv2d(4 * dim, 1, kernel_size=1, padding=0, stride=1)
-        self.norm2 = nn.BatchNorm2d(1)
-        self.act2 = nn.GELU()
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.norm1(x)
-
-        x = self.conv2(x)
-        x = self.act1(x)
-
-
-        x = self.conv3(x)
-        x = self.norm2(x)
-        x = self.act2(x)
-
-        # x = self.conv2(x)
-        # x = self.norm2(x)
-        # x = self.act2(x)
-
-        # y = x.reshape(x.shape[0], 2, x.shape[1] // 2, x.shape[2], x.shape[3])
-        # y = y.permute(0, 2, 1, 3, 4)
-        # x = y.reshape(y.shape[0], -1, y.shape[3], y.shape[4])
-
-
-        return x
-
 class Down(nn.Sequential):
     def __init__(self, in_channels):
         super().__init__()
@@ -81,8 +46,6 @@ class Down2(nn.Sequential):
         return self.conv(self.bn(x))
 
 class LayerNorm(nn.Module):
-    r""" From ConvNeXt (https://arxiv.org/pdf/2201.03545.pdf)
-    """
 
     def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
         super().__init__()
@@ -169,7 +132,7 @@ class BAJDGA(nn.Module):
         self.w = nn.Parameter(torch.ones(6)).cuda()
 
     def forward(self, xh, xl, mask, out):
-        # 解码特征，  编码器特征，   掩码
+
         a = torch.exp(self.w[0]) / torch.sum(torch.exp(self.w))
         b = torch.exp(self.w[1]) / torch.sum(torch.exp(self.w))
         c = torch.exp(self.w[2]) / torch.sum(torch.exp(self.w))
@@ -177,13 +140,9 @@ class BAJDGA(nn.Module):
         e = torch.exp(self.w[4]) / torch.sum(torch.exp(self.w))
         f = torch.exp(self.w[5]) / torch.sum(torch.exp(self.w))
 
-        #out = self.pre_project(out)
         out = F.interpolate(out, size=[xl.size(2), xl.size(3)], mode='bilinear', align_corners=True)
 
         xll = self.pre_project2(xl)
-
-        # t1 = self.pre_project3(t1)
-        # ref = F.interpolate(ref, size=[xl.size(2), xl.size(3)], mode='bilinear', align_corners=True)
 
 
         paraa = self.conv1(F.interpolate(self.share_space1, size=xl.shape[2:4], mode='bilinear', align_corners=True))
@@ -193,49 +152,21 @@ class BAJDGA(nn.Module):
         parah = self.conv5(F.interpolate(self.share_space5, size=xh.shape[2:4], mode='bilinear', align_corners=True))
         paral = self.conv6(F.interpolate(self.share_space6, size=xl.shape[2:4], mode='bilinear', align_corners=True))
 
-        #fuse  =     torch.sigmoid(mask * a + paraa ) * mask  +  torch.sigmoid(out * b + parab ) *out  +torch.sigmoid(xll * c + parac )*xll
-        #atten =     (xl + torch.sigmoid( d*xl + paral) * xl ) * torch.sigmoid (fuse)
-        #x = atten + (xh + torch.sigmoid( e*xh + parah) * xh ) * torch.sigmoid (atten)
-
-        # fuse  =     (torch.sigmoid(mask * a + paraa ) * mask  +  torch.sigmoid(out * b + parab ) *out  + torch.sigmoid(xll * c + parac )*xll)
-        # atten =     (xl + torch.sigmoid( d*xl + paral) * xl ) * torch.sigmoid (fuse)
-        # x = atten + (xh + torch.sigmoid( e*xh + parah) * xh ) * torch.sigmoid (fuse)
-
-#效果最佳0.8218,0.818     0.819（3）  0.821(2)   0.814(4)
         fuse  =   self.pre_project3(torch.cat([ torch.sigmoid(mask * a + paraa ) * mask,
                                                         torch.sigmoid(out * b + parab ) * out,
                                                         torch.sigmoid(xll * c + parac ) * xll,
                                                       # torch.sigmoid(ref * d + parad ) * ref,
                                                         ], dim=1 ))
-        # atten =     (xl +  torch.sigmoid(  e*xl + paral) * xl ) * torch.sigmoid (fuse)
-        # x = atten + (xh +  torch.sigmoid(  f*xh + parah) * xh ) * torch.sigmoid (fuse)
-
-        # atten =     (xl +  torch.sigmoid(  e*xl + paral) * xl ) * torch.sigmoid (fuse)
-        # x = atten + (xh +  torch.sigmoid(  f*xh + parah) * xh )# * torch.sigmoid (fuse)
 
         atten =     (xl +  torch.sigmoid(  e*xl + paral) * xl ) * torch.sigmoid (fuse)
         x = xl  + atten + (xh +  torch.sigmoid(  f*xh + parah) * xh )# * torch.sigmoid (fuse)
-
-        # atten =     (xl +  torch.sigmoid(  e*xl + paral) * xl ) * torch.sigmoid (fuse)
-        # x = xl + xh + atten + (xh +  torch.sigmoid(  f*xh + parah) * xh ) * torch.sigmoid (fuse)
-
-
-
-#0.822  加上shift mlp是0.820
-        # atten = xl +  torch.sigmoid((mask * a + out * b) * paral) * xl
-        # x = xl + (xh + torch.sigmoid((mask * d + out * e) * parah) * xh )* atten
-
-#0.820
-        # atten = xl +  torch.sigmoid((mask * a + out * b + ref * c ) * paral) * xl
-        # x = xl + (xh + torch.sigmoid((mask * d + out * e+ ref * f)  * parah) * xh )* atten
-
 
         return x, fuse
 
 class MlpChannel(nn.Module):
     def __init__(self, c_dim, shift):
         super().__init__()
-        self.pad = 2  # 需要的填充大小
+        self.pad = 2 
         self.shift = shift
         self.conv1 = nn.Sequential(
             nn.Conv2d(c_dim, c_dim, kernel_size=3, padding=1, groups=c_dim),
@@ -307,39 +238,22 @@ class Dual_Channel_Mixing_Shift_Convolution_Block(nn.Module):
         self.shift4 = MlpChannel(c_dim, [1, -1])
         self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))  # C*H*W
         self.conv5 = nn.Sequential(
-            #LiteDynamicDWConv(dim_in,dim_in)
             nn.Conv2d(dim_in, dim_in, kernel_size=3, padding=1, groups=dim_in),
-            # nn.BatchNorm2d(dim_in),
-            # nn.Conv2d(dim_in,  dim_in, 1),
-            # act_layer('gelu', inplace=True),
         )
 
     def forward(self, x):
         x = self.norm1(x)
         x1, x2, x3, x4 = torch.chunk(x, 4, dim=1)
         B, C, H, W = x1.size()
-
-        # x11 = x1 * self.conv1(F.interpolate(self.share_space1, size=x1.shape[2:4], mode='bilinear', align_corners=True))
-        # x22 = x2 * self.conv2(F.interpolate(self.share_space2, size=x1.shape[2:4], mode='bilinear', align_corners=True))
-        # x33 = x3 * self.conv3(F.interpolate(self.share_space3, size=x1.shape[2:4], mode='bilinear', align_corners=True))
-        # x44 = x4 * self.conv4(F.interpolate(self.share_space4, size=x1.shape[2:4], mode='bilinear', align_corners=True))
-        # xshift = torch.cat([x22, x44, x11, x33], dim=1)
-
-        # xshift = torch.cat([self.shift2(x2),self.shift4(x4),self.shift1(x1),self.shift3(x3)],dim=1)
-
         xshift = torch.cat([self.shift2(x2),
                                    self.shift4(x4),
                                    self.shift1(x1),
                                    self.shift3(x3)], dim=1)
-
         xres = torch.cat([x1, x2, x3, x4],dim=1)#
-
         x = xshift + self.conv5(xres)  # xres
-
         y = x.reshape(x.shape[0], 2, x.shape[1] // 2, x.shape[2], x.shape[3])
         y = y.permute(0, 2, 1, 3, 4)
         x = y.reshape(y.shape[0], -1, y.shape[3], y.shape[4])
-
         x = self.norm2(x)
         x = self.ldw(x)
 
@@ -355,34 +269,33 @@ class LSLSNet(nn.Module):
         self.gt_ds = gt_ds
         upscale_factor = 2
         self.encoder1 = nn.Sequential(
-            #nn.Conv2d(input_channels, c_list[0], 3, stride=1, padding=1),
+  
             MSPCB(input_channels, c_list[0], 3, False),  # 7
         )
         self.encoder2 = nn.Sequential(
-            #nn.Conv2d(c_list[0], c_list[1], 3, stride=1, padding=1),
+
             MSPCB(c_list[0], c_list[1], 3, True),
-            # ConvLayer(c_list[1]),
+  
 
         )
         self.encoder3 = nn.Sequential(
-            #nn.Conv2d(c_list[1], c_list[2], 3, stride=1, padding=1),
+
             MSPCB(c_list[1], c_list[2], 3, True),
-            # Grouped_multi_axis_Hadamard_Product_Attention(c_list[2], c_list[2]),
-            # ConvLayer(c_list[2]),
+
         )
         self.encoder4 = nn.Sequential(
-            #nn.Conv2d(c_list[2], c_list[3], 3, stride=1, padding=1),
+
             Dual_Channel_Mixing_Shift_Convolution_Block(c_list[2], c_list[3]),
-            # GSConv(c_list[2], c_list[3]),
+
         )
         self.encoder5 = nn.Sequential(
-            #nn.Conv2d(c_list[3], c_list[4], 3, stride=1, padding=1),
+
             Dual_Channel_Mixing_Shift_Convolution_Block(c_list[3], c_list[4]),
 
 
         )
         self.encoder6 = nn.Sequential(
-            #nn.Conv2d(c_list[4], c_list[5], 3, stride=1, padding=1),
+
             Dual_Channel_Mixing_Shift_Convolution_Block(c_list[4], c_list[5]),
 
         )
@@ -422,23 +335,23 @@ class LSLSNet(nn.Module):
             print('gt deep supervision was used')
 
         self.decoder1 = nn.Sequential(
-            #nn.Conv2d(c_list[5], c_list[4], 3, stride=1, padding=1),
+
             Dual_Channel_Mixing_Shift_Convolution_Block(c_list[5], c_list[4]),
         )
         self.decoder2 = nn.Sequential(
-            #nn.Conv2d(c_list[4], c_list[3], 3, stride=1, padding=1),
+
             Dual_Channel_Mixing_Shift_Convolution_Block(c_list[4], c_list[3]),
         )
         self.decoder3 = nn.Sequential(
-            #nn.Conv2d(c_list[3], c_list[2], 3, stride=1, padding=1),
+
             Dual_Channel_Mixing_Shift_Convolution_Block(c_list[3], c_list[2]),
         )
         self.decoder4 = nn.Sequential(
-            #nn.Conv2d(c_list[2], c_list[1], 3, stride=1, padding=1),
+
             MSPCB (c_list[2], c_list[1], 3, True)
         )
         self.decoder5 = nn.Sequential(
-            #nn.Conv2d(c_list[1], c_list[0], 3, stride=1, padding=1),
+
             MSPCB (c_list[1], c_list[0], 3, False)
         )
 
@@ -455,9 +368,7 @@ class LSLSNet(nn.Module):
 
 
         self.final = nn.Sequential(
-
             nn.Conv2d(c_list[0], 1, kernel_size=1)
-
         )
 
         self.w = nn.Parameter(torch.ones(5)).cuda()
@@ -481,17 +392,14 @@ class LSLSNet(nn.Module):
 
     def forward(self, x):
 
-
-        # out = F.gelu(F.max_pool2d(self.ebn1(self.encoder1(x)),2,2))
         out = F.gelu(self.Down1(self.ebn1(self.encoder1(x))))
         t1 = out  # b, 8, 128, 128
 
-        # out = F.gelu(F.max_pool2d(self.ebn2(self.encoder2(out)),2,2))
+
         out = F.gelu(self.Down2(self.ebn2(self.encoder2(out))))
         t2 = out  # b, 16, 64, 64
 
 
-        # out = F.gelu(F.max_pool2d(self.ebn3(self.encoder3(out)),2,2))
         out = F.gelu(self.Down3(self.ebn3(self.encoder3(out))))
         t3 = out  # b, 24, 32, 32
 
@@ -504,7 +412,6 @@ class LSLSNet(nn.Module):
         out = F.gelu(self.encoder6(out))  # b, 64, 8, 8
 
 
-        #out = self.bottle5(out) # MLP
 
         t6 = out
         t6 = self.bottle(t6)
@@ -513,14 +420,11 @@ class LSLSNet(nn.Module):
         out5 = F.gelu(self.dbn1(self.decoder1(out)))  # b, 48, 8, 8
 
 
-
-
         gt_pre5 = self.gt_conv1(out5)
         out5, atten5 = self.BAJDGA5(out5, t5, gt_pre5, t6)
         atten55 = self.edge_conv1(atten5)
         gt_pre55 = F.interpolate(gt_pre5, scale_factor=32, mode='bilinear', align_corners=True)
         edge_gt5 = F.interpolate(atten55, scale_factor=32, mode='bilinear', align_corners=True)
-
 
 
         out4 = F.gelu(F.interpolate(self.dbn2(self.decoder2(out5)), scale_factor=(2, 2), mode='bilinear',align_corners=True))  # b, c3, H/16, W/16
@@ -531,14 +435,12 @@ class LSLSNet(nn.Module):
         edge_gt4 = F.interpolate(atten44, scale_factor=16, mode='bilinear', align_corners=True)
 
 
-
         out3 = F.gelu(F.interpolate(self.dbn3(self.decoder3(out4)), scale_factor=(2, 2), mode='bilinear',align_corners=True))  # b, c2, H/8, W/8
         gt_pre3 = self.gt_conv3(out3)
         out3, atten3 = self.BAJDGA3(out3, t3, gt_pre3, atten44)
         atten33 = self.edge_conv3(atten3)
         gt_pre33 = F.interpolate(gt_pre3, scale_factor=8, mode='bilinear', align_corners=True)
         edge_gt3 = F.interpolate(atten33, scale_factor=8, mode='bilinear', align_corners=True)
-
 
 
         out2 = F.gelu(F.interpolate(self.dbn4(self.decoder4(out3)), scale_factor=(2, 2), mode='bilinear',align_corners=True))  # b, c1, H/4, W/4
@@ -549,7 +451,6 @@ class LSLSNet(nn.Module):
         edge_gt2 = F.interpolate(atten22, scale_factor=4, mode='bilinear', align_corners=True)
 
 
-
         out1 = F.gelu(F.interpolate(self.dbn5(self.decoder5(out2)), scale_factor=(2, 2), mode='bilinear',align_corners=True))  # b, c0, H/2, W/2
         gt_pre1 = self.gt_conv5(out1)
         out1, atten1 = self.BAJDGA1(out1, t1, gt_pre1, atten22)
@@ -557,17 +458,13 @@ class LSLSNet(nn.Module):
         gt_pre11 = F.interpolate(gt_pre1, scale_factor=2, mode='bilinear', align_corners=True)
         edge_gt1 = F.interpolate(atten11, scale_factor=2, mode='bilinear', align_corners=True)
 
-
         out0 = F.interpolate(self.final(out1), scale_factor=(2, 2), mode='bilinear', align_corners=True)  # b, num_class, H, W
-
-
 
 
         return (
             (torch.sigmoid(gt_pre55), torch.sigmoid(gt_pre44), torch.sigmoid(gt_pre33), torch.sigmoid(gt_pre22),torch.sigmoid(gt_pre11)),
 
             torch.sigmoid(out0),
-
 
             (torch.sigmoid(edge_gt5), torch.sigmoid(edge_gt4), torch.sigmoid(edge_gt3),torch.sigmoid(edge_gt2), torch.sigmoid(edge_gt1)),
 
