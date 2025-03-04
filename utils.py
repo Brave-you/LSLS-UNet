@@ -410,7 +410,7 @@ class muti_bce_loss_fusion(nn.Module):
 
 
 
-    def forward(self, gt_pre, out, aux, edge_gt, target):
+    def forward(self, gt_pre, out, edge_gt, target):
 
 
 
