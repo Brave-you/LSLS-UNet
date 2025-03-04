@@ -6,7 +6,7 @@ from thop import profile
 from timm.models.layers import trunc_normal_
 import math
 from module.LKselection import LSKBlock
-from module.GSconv_3 import MSPCB
+from module.MSPCB import MSPCB
 from module.attention import *
 from module.Deformconv import *
 import torch
